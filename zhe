@@ -1,0 +1,49 @@
+#!/bin/bash
+ZHE_TMPFILE=$(mktemp)
+######## 界面
+function show_usage() {
+    echo "Usage: zhe [OPTION] FILE"
+    echo "Opitons:"
+    echo -e "  -i file\tinclude file provides M4 macro definitions used in FILE."
+    echo -e "  -o file\toutput result to file."
+}
+if [[ $# = 0 ]]
+then
+    show_usage
+    exit -1
+fi
+while getopts "i:o:h" opt
+do
+    case $opt in
+        i)
+            awk '/./ { print $0}' "$OPTARG" > $ZHE_TMPFILE
+            ;;
+        o)
+            ZHE_OUTPUT="$OPTARG"
+            ;;
+        h)
+            show_usage
+            exit 0
+            ;;
+        ?|:|*)
+            show_usage
+            exit -1
+            ;;
+    esac
+done
+shift $(expr $OPTIND - 1)
+if [[ $1 = "" ]]
+then
+    show_usage
+    exit -1
+fi
+######## 本体
+ZHE_SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+awk '{ print }' $1 >> $ZHE_TMPFILE
+if [[ $ZHE_OUTPUT = "" ]]
+then
+    awk -f "$ZHE_SELF_PATH"/helper/zhe.awk $ZHE_TMPFILE #| m4
+else
+    awk -f "$ZHE_SELF_PATH"/helper/zhe.awk $ZHE_TMPFILE | m4 > "$ZHE_OUTPUT"
+fi
+rm $ZHE_TMPFILE
