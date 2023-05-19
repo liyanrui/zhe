@@ -4,7 +4,7 @@ ZHE_TMPFILE=$(mktemp)
 function show_usage() {
     echo "Usage: zhe [OPTION] FILE"
     echo "Opitons:"
-    echo -e "  -i file\tinclude file provides M4 macro definitions used in FILE."
+    echo -e "  -i file\tinclude file provides m4 macro definitions used in FILE."
     echo -e "  -o file\toutput result to file."
 }
 if [[ $# = 0 ]]
@@ -42,7 +42,7 @@ ZHE_SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 awk '{ print }' $1 >> $ZHE_TMPFILE
 if [[ $ZHE_OUTPUT = "" ]]
 then
-    awk -f "$ZHE_SELF_PATH"/helper/zhe.awk $ZHE_TMPFILE #| m4
+    awk -f "$ZHE_SELF_PATH"/helper/zhe.awk $ZHE_TMPFILE | m4
 else
     awk -f "$ZHE_SELF_PATH"/helper/zhe.awk $ZHE_TMPFILE | m4 > "$ZHE_OUTPUT"
 fi

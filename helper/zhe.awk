@@ -17,7 +17,6 @@ BEGIN { start = 0; macros[0] = 0 }
                     prefix = substr(b[k], 1, j - 1)
                     suffix = substr(b[k], j + length(t[1]))
                     b[k] = prefix "`" t[1] "'" suffix
-                    print ">>>" b[k]
                     gsub(/（/, "(", b[k])
                     gsub(/）/, ")", b[k])
                     gsub(/，/, ", ", b[k])
