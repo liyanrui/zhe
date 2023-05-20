@@ -5,7 +5,7 @@ BEGIN { start = 0; macros[0] = 0 }
     if (start) {
         k = 1; x = $0
         # 先处理有参数的宏
-        while (match(x, /(（[^’][^（）’]*[^‘]）)/, s) > 0) {
+        while (match(x, /[^‘](（[^（）’]*）)[^’]/, s) > 0) {
             x = substr(x, RSTART + RLENGTH)
             if (match(s[1], /（([^，）]+)/, t) > 0) {
                 sub(/^ */, "", t[1])
@@ -13,6 +13,7 @@ BEGIN { start = 0; macros[0] = 0 }
                 if (macros[t[1]]) {
                     a[k] = s[1]
                     b[k] = s[1]
+                    accessed[t[1]] = 1 # 记录有参数的宏被访问过
                     j = index(b[k], t[1])
                     prefix = substr(b[k], 1, j - 1)
                     suffix = substr(b[k], j + length(t[1]))
@@ -36,12 +37,13 @@ BEGIN { start = 0; macros[0] = 0 }
         # 处理无括号宏（无参宏）
         z = ""
         for (i in macros) {
-            if (!macros[i]) continue;
+            if (!macros[i] || accessed[i]) continue;
             x = $0
             while ((j = index(x, macros[i])) > 0) {
                 u = length(macros[i])
                 y = substr(x, j + u)
                 z = z substr(x, 1, j - 1)
+                prefix = substr(x, j-1, 1)
                 if ((substr(x, j-1, 1) != "`") && (substr(x, j + u, 1) != "'")) {
                     z = z "`'indir(`" macros[i] "')`'"
                 } else {
