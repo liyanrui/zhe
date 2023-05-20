@@ -1,0 +1,1 @@
+zhe 是使用 bash 语言编写的脚本，可用于简化中文 m4 宏的展开，其用法见「<https://liyanrui.github.io/output/bash/zhe.html>」。
