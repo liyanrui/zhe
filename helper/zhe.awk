@@ -21,7 +21,6 @@ BEGIN { start = 0; macros[0] = 0 }
                     sub(/^ */, "", t[1])
                     sub(/ *$/, "", t[1])
                     if (macros[t[1]]) {
-                        accessed[t[1]]++ # 记录有参数的宏被访问过
                         i = index(a, t[1])
                         prefix = substr(a, 1, i - 1)
                         suffix = substr(a, i + length(t[1]))
