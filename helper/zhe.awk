@@ -3,41 +3,46 @@ BEGIN { start = 0; macros[0] = 0 }
     if ($0 ~ /^ *@宏开 *$/) { start = 1; next }
     if ($0 ~ /^ *@宏闭 *$/) { start = 0; next }
     if (start) {
-        k = 1; x = $0
-        # 先处理有参数的宏
-        while (match(x, /[^‘](（[^（）’]*）)[^’]/, s) > 0) {
-            x = substr(x, RSTART + RLENGTH)
-            if (match(s[1], /（([^，）]+)/, t) > 0) {
-                sub(/^ */, "", t[1])
-                sub(/ *$/, "", t[1])
-                if (macros[t[1]]) {
-                    a[k] = s[1]
-                    b[k] = s[1]
-                    accessed[t[1]] = 1 # 记录有参数的宏被访问过
-                    j = index(b[k], t[1])
-                    prefix = substr(b[k], 1, j - 1)
-                    suffix = substr(b[k], j + length(t[1]))
-                    b[k] = prefix "`" t[1] "'" suffix
-                    gsub(/（/, "(", b[k])
-                    gsub(/）/, ")", b[k])
-                    gsub(/，/, ", ", b[k])
-                    b[k] = "`'indir" b[k] "`'"
-                    k++
+        k = 1; x = $0; y = ""
+        # 先处理有参数的宏：不支持嵌套调用
+        while (match(x, /(（[^（）‘’]*）)/, s) > 0) {
+            a = s[1]
+            before_a = substr(x, 1, RSTART - 1)
+            after_a = substr(x, RSTART + RLENGTH)
+            y = y before_a
+            x = after_a
+            # 处理转义
+            if ((before_a ~ /‘ *$/) || (after_a ~ /^ *’/)) {
+                y = y a
+                continue
+            } else {
+                # 构造 m4 宏间接调用，即 indir(`宏名', 参数)
+                if (match(a, /（([^，）]+)/, t) > 0) {
+                    sub(/^ */, "", t[1])
+                    sub(/ *$/, "", t[1])
+                    if (macros[t[1]]) {
+                        accessed[t[1]]++ # 记录有参数的宏被访问过
+                        i = index(a, t[1])
+                        prefix = substr(a, 1, i - 1)
+                        suffix = substr(a, i + length(t[1]))
+                        a = prefix "`" t[1] "'" suffix
+                        gsub(/（/, "(", a)
+                        gsub(/）/, ")", a)
+                        gsub(/，/, ", ", a)
+                        a = "`'indir" a "`'"
+                    }
                 }
+                y = y a
             }
         }
-        for (i = 1; i < k; i++) {
-            j = index($0, a[i])
-            prefix = substr($0, 1, j - 1)
-            suffix = substr($0, j + length(a[i]))
-            $0 = prefix b[i] suffix
-        }
-        gsub(/‘/, "`", $0)
-        gsub(/’/, "'", $0)
+        y = y x
+        gsub(/‘/, "`", y)
+        gsub(/’/, "'", y)
+        $0 = y
         # 处理无括号宏（无参宏）
         z = ""
         for (i in macros) {
-            if (!macros[i] || accessed[i]) continue;
+            if (!macros[i]) continue;
             x = $0
             while ((j = index(x, macros[i])) > 0) {
                 u = length(macros[i])
