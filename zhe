@@ -42,7 +42,7 @@ ZHE_SELF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 awk '{ print }' $1 >> $ZHE_TMPFILE
 if [[ $ZHE_OUTPUT = "" ]]
 then
-    awk -f "$ZHE_SELF_PATH"/helper/zhe.awk $ZHE_TMPFILE | m4
+    awk -f "$ZHE_SELF_PATH"/helper/new-zhe.awk $ZHE_TMPFILE | m4
 else
     awk -f "$ZHE_SELF_PATH"/helper/zhe.awk $ZHE_TMPFILE | m4 > "$ZHE_OUTPUT"
 fi
