@@ -1,0 +1,7 @@
+\usemodule[zhfonts][size=11pt]
+\setupzhfonts[serif][regular=simsun]
+
+\starttext
+你好，\CONTEXT！
+\placefigure[here][]{标题}{\externalfigure[foo.pdf][width=0.5\textwidth]}
+\stoptext

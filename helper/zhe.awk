@@ -1,75 +1,99 @@
-BEGIN { start = 0; macros[0] = 0 }
-{
-    if ($0 ~ /^ *@宏开 *$/) { start = 1; next }
-    if ($0 ~ /^ *@宏闭 *$/) { start = 0; next }
-    if (start) {
-        k = 1; x = $0; y = ""
-        # 先处理有参数的宏：不支持嵌套调用
-        while (match(x, /(（[^（）‘’]*）)/, s) > 0) {
-            a = s[1]
-            before_a = substr(x, 1, RSTART - 1)
-            after_a = substr(x, RSTART + RLENGTH)
-            y = y before_a
-            x = after_a
-            # 处理转义
-            if ((before_a ~ /‘ *$/) || (after_a ~ /^ *’/)) {
-                y = y a
-                continue
-            } else {
-                # 构造 m4 宏间接调用，即 indir(`宏名', 参数)
-                if (match(a, /（([^，）]+)/, t) > 0) {
-                    sub(/^ */, "", t[1])
-                    sub(/ *$/, "", t[1])
-                    if (macros[t[1]]) {
-                        i = index(a, t[1])
-                        prefix = substr(a, 1, i - 1)
-                        suffix = substr(a, i + length(t[1]))
-                        a = prefix "`" t[1] "'" suffix
-                        gsub(/（/, "(", a)
-                        gsub(/）/, ")", a)
-                        gsub(/，/, ", ", a)
-                        a = "`'indir" a "`'"
-                    }
-                }
-                y = y a
-            }
-        }
-        y = y x
-        gsub(/‘/, "`", y)
-        gsub(/’/, "'", y)
-        $0 = y
-        # 处理无括号宏（无参宏）
-        z = ""
-        for (i in macros) {
-            if (!macros[i]) continue;
-            x = $0
-            while ((j = index(x, macros[i])) > 0) {
-                u = length(macros[i])
-                y = substr(x, j + u)
-                z = z substr(x, 1, j - 1)
-                prefix = substr(x, j-1, 1)
-                if ((substr(x, j-1, 1) != "`") && (substr(x, j + u, 1) != "'")) {
-                    z = z "`'indir(`" macros[i] "')`'"
-                } else {
-                    z = z macros[i]
-                }
-                x = y
-            }
-            z = z x
-            $0 = z
-            z = ""
-        }
-    } else {
-        # 扫描宏定义
-        k = 0; x = $0
-        # 先处理有参数的宏
-        while (match(x, /define\(([^,]+)/, s) > 0) {
-            x = substr(x, RSTART + RLENGTH)
-            sub(/^ *` */, "", s[1])
-            sub(/ *' *$/, "", s[1])
-            macros[s[1]] = s[1]
-        }
-    }
+/divert\(-1\)/ {
+    action = 0
     print $0
+    next
 }
-
+/divert\(0\)dnl/ {
+    action = 1
+    print $0
+    next
+}
+{
+   if (!action) {
+       print $0
+       x = $0
+       while(match(x, /define\(/)) {
+           s = substr(x, RSTART + RLENGTH)
+           x = s
+           sub(/,.*$/, "", s)
+           sub(/^[` \t]*/, "", s)
+           sub(/[' \t]*$/, "", s)
+           macros[s] = s
+       }
+   } else {
+       i = 1; n = length($0)
+       esc = 0; zhe = 0
+       while (i <= n) {
+           x = substr($0, i)
+           if (index(x, "`") == 1 || index(x, "‘") == 1) esc++
+           if (esc) {
+               if (index(x, "'") == 1 || index(x, "’") == 1) esc--
+           } else {
+               if (index(x, "（") == 1) zhe = 1
+               if (zhe) {
+                   depth = 1
+                   for (j = 1; j < n; j++) {
+                       y = substr(x, j + 1)
+                       if (index(y, "（") == 1) {
+                           depth++
+                       }
+                       if (index(y, "）") == 1) {
+                           depth--
+                       }
+                       if (depth == 0) break
+                   }
+                   if (depth != 0) {
+                       print "错误：在 <" substr(x, 1, length(x) / 10) "...> 存在非封闭括号"
+                   } else {
+                       m = length("）")
+                       before = substr($0, 1, i - 1)
+                       macro = substr($0, i, j + m)
+                       after = substr($0, i + j + m)
+                   }
+                   sub(/^（/, "(", macro)
+                   sub(/）$/, ")", macro)
+                   gsub(/，/, ",", macro)
+                   prefix = "`'indir"
+                   macro = prefix macro
+                   i = i + length(prefix)
+                   $0 = before macro after
+                   n = length($0)
+                   zhe = 0
+               }
+           }
+           i++
+       }
+       for (a in macros) {
+           i = 1; n = length($0)
+           esc = 0; zhe = 0
+           while (i <= n) {
+               x = substr($0, i)
+               if (index(x, "`") == 1 || index(x, "‘") == 1) esc++
+               if (esc) {
+                   if (index(x, "'") == 1 || index(x, "’") == 1) esc--
+               } else {
+                   if (index(x, a) == 1) {
+                       y = substr($0, 1, i - 1)
+                       if (!match(y, /indir\($/)) {
+                           zhe = 1
+                       }
+                   }
+                   if (zhe) {
+                       prefix = "`'indir("
+                       before = substr($0, 1, i - 1)
+                       macro = prefix a ")"
+                       after = substr($0, i + length(a))
+                       $0 = before macro after
+                       i = i + length(prefix)
+                       n = length($0)
+                       zhe = 0
+                   }
+               }
+               i++
+           }
+       }
+       gsub(/‘/, "`", $0)
+       gsub(/’/, "'", $0)
+       print $0
+   }
+}
