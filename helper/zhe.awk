@@ -1,99 +1,127 @@
-/divert\(-1\)/ {
-    action = 0
-    print $0
-    next
+BEGIN {
+    while ((getline name < names) > 0) {
+        # 去除首尾空白字符
+        gsub(/^[ \t]+|[ \t]+$/, "", name)
+        # 将宏名加入中文宏表
+        # 需要查表时，用 name in zh_macros 表达式判断中文宏是否有定义
+        if (name != "") zh_macros[name] = 1
+    }
+    # 逃逸深度，值为 0 表示非逃逸状态
+    esc = 0
+    # 宏调用语句嵌套深度，0 表示无嵌套
+    depth = 0
 }
-/divert\(0\)dnl/ {
-    action = 1
-    print $0
-    next
+function process_macros(a,
+                        # 局部变量
+                        b, n, i, x, c) {
+    b = ""; n = length(a); i = 1
+    while (i <= n) {
+        x = substr(a, i, 1)
+        if (x == "`") {
+            esc++; b = b x; i++
+        } else if (x == "'") {
+            if (esc > 0) esc--
+            b = b x; i++
+        } else {
+            if (esc > 0) {
+                b = b x; i++
+            } else {
+                if (x == "~" || x == "～") {
+                    c = x
+                    if (i == n) break
+                    i++; x = substr(a, i, 1); c = c x
+                    if (x == "(" || x == "（") {
+                        depth = 0
+                        while (i < n) {
+                            i++; x = substr(a, i, 1); c = c x
+                            if (x == "~" || x == "～") {
+                                if (i == n) break
+                                x = substr(a, i + 1, 1)
+                                # 试探之后的内容是否为嵌套的有参数宏
+                                if (x == "(" || x == "（") {
+                                    depth++
+                                    c = c x
+                                    i++
+                                }
+                                continue
+                            }
+                            if (x == ")" || x == "）") {
+                                if (i == n) break
+                                i++; x = substr(a, i, 1); c = c x
+                                if (x == "~" || x == "～") {
+                                    if (depth == 0) {
+                                        c = expand_zh_macro(c)
+                                        break
+                                    }
+                                    if (depth > 0) depth--
+                                }
+                            }
+                        }
+                    } else {
+                        while (i < n) {
+                            i++; x = substr(a, i, 1); c = c x
+                            if (x == "~" || x == "～") {
+                                c = expand_zh_macro(c)
+                                break
+                            }
+                        }
+                    }
+                    b = b c
+                    i++
+                } else {
+                    b = b x; i++
+                }
+            }
+        }
+    }
+    return b
 }
-{
-   if (!action) {
-       print $0
-       x = $0
-       while(match(x, /define\(/)) {
-           s = substr(x, RSTART + RLENGTH)
-           x = s
-           sub(/,.*$/, "", s)
-           sub(/^[` \t]*/, "", s)
-           sub(/[' \t]*$/, "", s)
-           macros[s] = s
-       }
-   } else {
-       i = 1; n = length($0)
-       esc = 0; zhe = 0
-       while (i <= n) {
-           x = substr($0, i)
-           if (index(x, "`") == 1 || index(x, "‘") == 1) esc++
-           if (esc) {
-               if (index(x, "'") == 1 || index(x, "’") == 1) esc--
-           } else {
-               if (index(x, "（") == 1) zhe = 1
-               if (zhe) {
-                   depth = 1
-                   for (j = 1; j < n; j++) {
-                       y = substr(x, j + 1)
-                       if (index(y, "（") == 1) {
-                           depth++
-                       }
-                       if (index(y, "）") == 1) {
-                           depth--
-                       }
-                       if (depth == 0) break
-                   }
-                   if (depth != 0) {
-                       print "错误：在 <" substr(x, 1, length(x) / 10) "...> 存在非封闭括号"
-                   } else {
-                       m = length("）")
-                       before = substr($0, 1, i - 1)
-                       macro = substr($0, i, j + m)
-                       after = substr($0, i + j + m)
-                   }
-                   sub(/^（/, "(", macro)
-                   sub(/）$/, ")", macro)
-                   gsub(/，/, ",", macro)
-                   prefix = "`'indir"
-                   macro = prefix macro
-                   i = i + length(prefix)
-                   $0 = before macro after
-                   n = length($0)
-                   zhe = 0
-               }
-           }
-           i++
-       }
-       for (a in macros) {
-           i = 1; n = length($0)
-           esc = 0; zhe = 0
-           while (i <= n) {
-               x = substr($0, i)
-               if (index(x, "`") == 1 || index(x, "‘") == 1) esc++
-               if (esc) {
-                   if (index(x, "'") == 1 || index(x, "’") == 1) esc--
-               } else {
-                   if (index(x, a) == 1) {
-                       y = substr($0, 1, i - 1)
-                       if (!match(y, /indir\($/)) {
-                           zhe = 1
-                       }
-                   }
-                   if (zhe) {
-                       prefix = "`'indir("
-                       before = substr($0, 1, i - 1)
-                       macro = prefix a ")"
-                       after = substr($0, i + length(a))
-                       $0 = before macro after
-                       i = i + length(prefix)
-                       n = length($0)
-                       zhe = 0
-                   }
-               }
-               i++
-           }
-       }
-       gsub(/‘/, "`", $0)
-       gsub(/’/, "'", $0)
-       print $0
-   }
+function expand_zh_macro(c,
+                         # 局部变量
+                         macro, m, n, i, j, x, parts, depth, args) {
+    m = length(c)
+    # 去掉宏调用语句两侧的 ~ 符号
+    macro = substr(c, 2, m - 2); m -= 2
+    if (macro) {
+        x = substr(macro, 1, 1)
+        if (x == "(" || x == "（") {
+            # 去除两侧括号
+            macro = substr(macro, 2, m - 2); m -= 2
+            if (macro) {
+                # 分割宏名与参数
+                n = 1; depth = 0
+                for (i = 1; i <= m; i++) {
+                    x = substr(macro, i, 1)
+                    if (x == "(" || x == "（") {
+                        depth++
+                        parts[n] = parts[n] x
+                    } else if (x == ")" || x == "）") {
+                        if (depth > 0) depth--
+                        parts[n] = parts[n] x
+                    } else if (x == "," || x == "，") {
+                        if (depth == 0) n++
+                        else parts[n] = parts[n] x
+                    } else parts[n] = parts[n] x
+                }
+                # 去掉宏名与参数两侧的空白字符
+                for (i = 2; i <= n; i++) {
+                    gsub(/^[ \t]+|[ \t]+$/, "", parts[i])
+                }
+                # 展开有参数中文宏
+                if (parts[1] in zh_macros) {
+                    args = ""
+                    for (i = 2; i <= n; i++) {
+                        # 处理嵌套的中文宏调用语句
+                        args = args ", `" process_macros(parts[i]) "'"
+                    }
+                    macro = "`'indir(`" parts[1] "'" args ")`'"
+                } else macro = c
+            }
+        } else {
+            gsub(/^[ \t]+|[ \t]+$/, "", macro)
+            macro = "`'indir(`" macro "')`'"
+        }
+    }
+    return macro
 }
+{ print process_macros($0) }

@@ -3,5 +3,5 @@
 
 \starttext
 你好，\CONTEXT！
-\placefigure[here][]{标题}{\externalfigure[foo.pdf][width=0.5\textwidth]}
+\placefigure[here][]{标题}{\externalfigure[foo.pdf][width=0.5*\textwidth]}
 \stoptext
